@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-Vendor: Acme
+Bundle-Version: 1.0.0
+Bundle-Name: Gyroscope Bundle 1
+Bundle-ManifestVersion: 2
+Bundle-Activator: com.acme.gyroscope1.Activator
+Bundle-Description: Gyroscope Bundle 1
+Bundle-SymbolicName: com.acme.gyroscope1
+Import-Package: org.osgi.framework, android.content, android.hardware, android.os, android.app, android.widget, android.view

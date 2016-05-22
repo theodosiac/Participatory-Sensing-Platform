@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name" translatable="false">ParticipatorySensing</string>
+    <string name="action_settings" translatable="false">Settings</string>
+    <string name="button_displayLog">Display Log</string>
+    <string name="button_displayData">Display Data</string>
+    <string name="installBundles">Install</string>
+    <string name="text_view">TextView</string>
+
+</resources>

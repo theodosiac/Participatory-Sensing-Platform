@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-Vendor: Acme
+Bundle-Version: 1.0.0
+Bundle-Name: Proximity Bundle
+Bundle-ManifestVersion: 2
+Bundle-Activator: com.acme.proximity.Activator
+Bundle-Description: Proximity Bundle 
+Bundle-SymbolicName: com.acme.proximity
+Import-Package: org.osgi.framework, android.content, android.hardware, android.os, android.app, android.widget, android.view

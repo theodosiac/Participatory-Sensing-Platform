@@ -1,0 +1,618 @@
+package participatorySensing;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import org.apache.felix.framework.Felix;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.BundleException;
+import org.osgi.framework.Constants;
+import org.osgi.framework.InvalidSyntaxException;
+
+import com.bundlemanager.main.R;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
+import android.os.Bundle;
+import android.support.v4.app.NotificationCompat;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+
+
+public class MainActivity extends Activity {
+
+	//various initiations
+	TextView label = null;
+	public Felix m_felix =null;
+	BundleContext felixContext;
+	Client restClient;
+	String bundlePath;
+	EditText serverText ;
+	MainActivity thisActivity ;
+	//list processing is used in order to avoid overlaping of the downloaded bundles
+	int listProcessing=0;
+	List<String> denyList=new ArrayList<String>();
+	List<String> acceptList=new ArrayList<String>();
+	String logString="";
+	private Timer mainTimer=null;
+
+	
+	
+    private boolean mIsInForegroundMode;
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mIsInForegroundMode = false;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mIsInForegroundMode = true;
+    	//this.appendLog("mIsInForegroundMode = true");
+    }
+
+    // Some function.
+    public boolean isInForeground() {
+        return mIsInForegroundMode;
+    }
+    
+    public Button startButton;
+	TextView label1;
+	
+	/*
+	 * This subroutine provides some initializations
+	 */
+	private void initiate()
+	{
+		
+
+		//Give value to labels and buttons
+		label1 = (TextView) findViewById(R.id.text_view);
+		startButton = (Button) findViewById(R.id.button5);
+		startButton.setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
+		thisActivity=this;
+		
+		//Create the directory where the downloaded bundles are stored
+		bundlePath = "storage/emulated/0/OSGIPluginManager";
+		File folder = new File(bundlePath);
+		bundlePath+="/";
+		if(folder.exists() && folder.isDirectory())
+		{
+			//nothing needs to be done if the folder exists
+		}
+		else
+			//create the directory
+			folder.mkdir();
+	}
+	
+	/*
+	 * This subroutine prints text into the main text view of the application
+	 */
+	public void LogEx(String info)
+	{
+		Log.d("Felix",info);
+		if(label == null)
+			label = (TextView) findViewById(R.id.text_view);
+		
+		if(label != null)
+			label.setText(label.getText()+info+"\n");
+	}
+	
+	/*
+	 * This subroutine appends a text into the main text view of the application
+	 */
+	public void appendLog(String info)
+	{
+			logString=logString+info+"\n";
+			label1.setText(logString);
+	}
+	
+	/*
+	 * This subroutine lanches the OSGi Felix framework
+	 */
+	void launchFelix() {
+		
+		//initiations
+		serverText = (EditText) findViewById(R.id.editText1);
+		serverText.setText("192.168.2.3");;
+		String cacheDir= null;
+		try
+		{
+			cacheDir = File.createTempFile("skifta", ".tmp").getParent();
+		}
+		catch(IOException e)
+		{
+			Log.d("Felix", "Unable to create temp file",e);
+		}
+		
+	
+		final String ANDROID_FRAMEWORK_PACKAGES = (
+	            "android,"
+	            + "android.app,"
+	            + "android.content,"
+	            + "android.database,"
+	            + "android.database.sqlite,"
+	            + "android.graphics,"
+	            + "android.graphics.drawable,"
+	            + "android.graphics.glutils,"
+	            + "android.hardware,"
+	            + "android.location,"
+	            + "android.media,"
+	            + "android.net,"
+	            + "android.net.wifi,"
+	            + "android.opengl,"
+	            + "android.os,"
+	            + "android.provider,"
+	            + "android.sax,"
+	            + "android.speech.recognition,"
+	            + "android.telephony,"
+	            + "android.telephony.gsm,"
+	            + "android.text,"
+	            + "android.text.method,"
+	            + "android.text.style,"
+	            + "android.text.util,"
+	            + "android.util,"
+	            + "android.view,"
+	            + "android.view.animation,"
+	            + "android.webkit,"
+	            + "android.widget");
+		
+		Map<String, String> configMap = new HashMap<String, String>();
+		
+
+		  // Export android packages so they can be referenced by bundles
+		configMap.put(Constants.FRAMEWORK_SYSTEMPACKAGES_EXTRA,
+		    ANDROID_FRAMEWORK_PACKAGES);
+		
+		configMap.put("org.osgi.framework.storage", cacheDir);
+		configMap.put("felix.embedded.execution", "true");
+		configMap.put("org.osgi.service.http.port", "9990");
+		configMap.put("org.osgi.framework.startlevel.beginning", "5");		
+		
+	
+		try
+		{
+			//Create a new instance of felix framework
+			m_felix = new Felix(configMap);
+			
+			//start the felix
+			m_felix.start();
+			
+			if (m_felix != null) 
+			   {
+					appendLog("Felix is started!");
+					
+					// Register the application's context as an OSGi service!
+					BundleContext bundleContext = m_felix.getBundleContext();
+					bundleContext.registerService(Context.class,getApplicationContext(),new Hashtable<String, Object>());
+					
+					// Register the application's activity as an OSGi service!
+					bundleContext.registerService(Activity.class,this,new Hashtable<String, Object>());
+					
+					//Uninstall any old bundles if they exist
+					uninstallBundles();		
+					
+					for(org.osgi.framework.Bundle b : m_felix.getBundleContext().getBundles())
+						appendLog("Bundle: "+ b.getSymbolicName()+ ",ID: "+b.getBundleId());
+				
+			
+					felixContext = m_felix.getBundleContext();
+			   }
+						
+		}
+		catch(Throwable ex)
+		{
+			appendLog("Could not create Framework: "+ex.getMessage());
+		}
+		
+	}
+
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_main);
+	
+		initiate();
+		launchFelix();
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		// Inflate the menu; this adds items to the action bar if it is present.
+		getMenuInflater().inflate(R.menu.main, menu);
+		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		// Handle action bar item clicks here. The action bar will
+		// automatically handle clicks on the Home/Up button, so long
+		// as you specify a parent activity in AndroidManifest.xml.
+		int id = item.getItemId();
+		if (id == R.id.action_settings) {
+			return true;
+		}
+		return super.onOptionsItemSelected(item);
+	}
+
+	/** Called when the user clicks the Send button */
+	@SuppressLint("ResourceAsColor")
+	
+	Client restClient1 = null;
+	
+	/*
+	 * This is called when the start/stop button is pressed
+	 */
+	public void StartStopButtonPress(View view) {	
+
+
+		if(mainTimer!=null) //means that the timer already runs so we need to
+			                //stop rest client and timer 
+		{
+			this.uninstallBundles();
+			startButton.setText("Start");
+			mainTimer.cancel();
+			startButton.setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
+			mainTimer=null;
+			
+			restClient1.timer.cancel();
+			restClient1.cancel(true);
+
+			return;
+		}
+		else //means that the timer is stoped so we need to
+            //start rest client and timer 
+		{
+			
+			restClient1 = new Client(this);
+			restClient1.execute("sendData","http://"+this.serverText.getText()+":8080/com.vogella.jersey.first/rest/hello/crunchifyService");
+			
+			startButton.setText("Stop");
+			mainTimer = new Timer();
+		    mainTimer.scheduleAtFixedRate(new TimerTask() {
+	
+		        @Override
+		        public void run() {
+		            // TODO Auto-generated method stub
+		            runOnUiThread(new Runnable() {
+		                public void run() {
+		          
+		                	if(listProcessing==0)
+		                	{
+		                		listProcessing=1;
+			            		Client restClient = new Client(thisActivity);
+			            		serverText = (EditText) findViewById(R.id.editText1);
+
+			            		restClient.execute("DownloadList","http://"+serverText.getText()+":8080/com.vogella.jersey.first/rest/hello", bundlePath);
+		                	}
+		                }
+		            });
+	
+		        }
+		    }, 1000, 5000); // 1000 means start from 1 sec, and the second 5000 is do the loop each 1 sec.
+		
+		}
+		
+	}
+	
+	/*
+	 * This subroutine unnistall all bundles
+	 */
+	public void uninstallBundles ()
+	{
+		for (org.osgi.framework.Bundle bundle : m_felix.getBundleContext().getBundles()) 
+		{
+			if(bundle.getBundleId()==0)
+				continue;
+			try {
+				bundle.uninstall();
+			} catch (BundleException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+	}
+	
+
+	/*
+	 * This subroutine checks if a bundle is installed
+	 */
+	public boolean isBundledInstalled (String bundleSymbolicName)
+	{
+		for (org.osgi.framework.Bundle bundle : m_felix.getBundleContext().getBundles()) 
+		{
+			if(bundle.getSymbolicName().equals(bundleSymbolicName))
+				return true;
+		}
+		return false;
+		
+	}
+	
+	/**
+	 * This subroutine shows a notification when a new bundle needs access
+	 */
+	public void showNotification(MainActivity mainActivity)
+	{
+		 NotificationManager  manager =
+
+                 (NotificationManager)mainActivity.getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
+                   final Intent intent = new Intent(mainActivity.getApplicationContext(), MainActivity.class);
+                   intent.setAction(Intent.ACTION_MAIN);
+                   intent.addCategory(Intent.CATEGORY_LAUNCHER);
+                   PendingIntent pendingIntent = PendingIntent.getActivity(mainActivity.getApplicationContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+                   String message = "New plugin needs confirmation..";
+                   NotificationCompat.Builder  builder = new NotificationCompat.Builder(mainActivity.getApplicationContext())
+                       .setSmallIcon(R.drawable.ic_launcher)
+                       
+                       .setContentTitle("Plugin Installation")
+                       .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
+                       .setContentText(message)
+                       .setContentIntent(pendingIntent)
+                       .setAutoCancel(true).setLights(0xFF0000FF,100,3000);
+
+
+                   manager.notify(1, builder.build());
+	}
+	
+	
+	/*
+	 * This subroutine downloads a bundle from the server given its name
+	 */
+	public void downloadBundle(MainActivity myActivity, String bName)
+	{
+		File file =new File(myActivity.bundlePath+bName+".apk");
+		listProcessing++;
+		if(!file.exists())
+		{
+    		Client restClient1 = new Client(myActivity);
+			restClient1.execute("DownloadBundle","http://"+myActivity.serverText.getText()+":8080/com.vogella.jersey.first/rest/hello/downloadbundle", myActivity.bundlePath+bName+".apk",bName);	
+		}
+		else 
+			if(!installBundle(myActivity.bundlePath+bName+".apk",myActivity))
+			{
+				file.delete();
+				myActivity.appendLog(myActivity.bundlePath+bName+".apk deleted");
+
+			}
+	}
+	
+	
+	/** 
+	 * This subroutine is called each time the bundle list is downloaded.
+	 *
+	 * */
+	public void bundleManager(String bundleList, final MainActivity myActivity) 
+	{	
+		final List<String> myList = new ArrayList<String>(Arrays.asList(bundleList.split("\n")));
+		
+		//check if there are any bundles not in list and uninstall them
+		for (org.osgi.framework.Bundle bundle : myActivity.m_felix.getBundleContext().getBundles()) 
+		{
+			if(bundle.getBundleId()==0)
+				continue;
+			if(!myList.contains(bundle.getSymbolicName()))
+			{
+				try {
+					bundle.uninstall();
+					myActivity.appendLog(bundle.getSymbolicName()+ " uninstalled");
+				} catch (BundleException e) {
+					// TODO Auto-generated catch block
+					myActivity.appendLog("Failed to unninstall "+bundle.getSymbolicName()+": "+e.getMessage());
+				
+				}
+			}
+		}
+		
+
+		if (!bundleList.equals(""))
+		{
+			// add this in order to wait until the user accepts all bundles before downloading the list again
+			listProcessing=myList.size();
+			
+			for (String bundleSymbolicName : myList) 
+			{
+				//if the bundle is not already installed or it is not in the deny list
+				if(!this.isBundledInstalled(bundleSymbolicName)&&!myActivity.denyList.contains(bundleSymbolicName))
+				{
+					//Check if user accepts this plugin
+						final String bName = bundleSymbolicName;
+						//Install the bundle
+						if(!myActivity.acceptList.contains(bundleSymbolicName))
+						{
+							//Show a notification
+		                    if(!myActivity.isInForeground())
+		                    	myActivity.showNotification(myActivity);
+		                    
+		                	/*
+		                	 * Pop up a confirmation dialog to the user in order to allow or not a new bundle
+		                	 */
+							new AlertDialog.Builder(myActivity)
+							.setTitle("New plugin installation")
+							.setMessage("Do you want to give access to "+ bName+"?")
+							.setIcon(R.drawable.ic_launcher)
+							
+							.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+							    public void onClick(DialogInterface dialog, int whichButton) {
+							    	myActivity.acceptList.add(bName);
+							    	try {
+										myActivity.appendLog("Access granted for "+bName);
+										downloadBundle(myActivity,bName);
+
+									} catch (Exception e) {
+										myActivity.appendLog("Starting Download Bundle Error: "+e.getMessage());
+				
+										// TODO Auto-generated catch block
+									}
+						    		listProcessing--;
+							    }})
+							 .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+									
+								    public void onClick(DialogInterface dialog, int whichButton) {
+		
+											myActivity.appendLog("Access denied for "+bName);
+								    		listProcessing--;
+								    		denyList.add(bName);
+		
+		
+				
+								    }}).show();
+						} else
+						{
+					    	try {
+								downloadBundle(myActivity,bName);	
+							} catch (Exception e) {
+								myActivity.appendLog("Starting Download Bundle Error: "+e.getMessage());
+		
+								// TODO Auto-generated catch block
+								//e.printStackTrace();
+							}
+				    		listProcessing--;
+						}
+	
+					//}	
+				}
+				else
+					listProcessing--;
+			}
+		}
+		else
+			listProcessing=0;
+	}
+	
+	/** 
+	 * Installs a given bundle 
+	 * */
+	public boolean installBundle(String bundlePath,final MainActivity myActivity) {	
+		org.osgi.framework.Bundle bundle=null;
+		boolean retval;
+		try 
+		{			
+			bundle = myActivity.felixContext.installBundle("file:"+bundlePath);
+			myActivity.appendLog(bundle.getSymbolicName()+ " installed.");
+			retval= true;
+			
+		} 
+		catch (BundleException e) 
+	    {
+			myActivity.appendLog("Install Error: "+e.getMessage());
+			retval=  false;
+		}
+		listProcessing--;
+		if(bundle!=null)
+			myActivity.startBundle(bundle,myActivity);
+		return retval;
+	}
+	
+	/** 
+	 * This Subroutine starts a given bundle
+	 * */
+	public void startBundle(org.osgi.framework.Bundle bundle,final MainActivity myActivity) {	
+		try 
+		{			
+			bundle.start();
+			myActivity.appendLog(bundle.getSymbolicName()+ " started.");
+			
+		} 
+		catch (BundleException e) 
+	    {
+			myActivity.appendLog("Start Error: "+e.getMessage());
+		}
+	}
+	
+	/** Called when the user clicks the Display Data button */
+	public void displayDataButtonPress(View view) {
+		
+		label1.setText("");
+		for (org.osgi.framework.Bundle bundle :  m_felix.getBundleContext().getBundles()) 
+		{ 
+			if(bundle.getBundleId()==0) //exclude felix bundle
+				continue;
+
+			if(bundle.getState()!=org.osgi.framework.Bundle.ACTIVE) //exclude if bundle is not started
+				continue;
+
+
+			try {		
+				for (org.osgi.framework.ServiceReference b :  bundle.getBundleContext().getAllServiceReferences(ArrayList.class.getName() , null)) 
+				{
+					if (b!=null&&b.getBundle().getBundleId()==bundle.getBundleId())//valid reference and corresponds to current bundle
+					{			
+						try {
+							ArrayList<Float> sensorData = (ArrayList<Float> )bundle.getBundleContext().getService(b);
+							String str="";
+							for(int i=0;i<sensorData.size();i++)
+								str   +=Float.toString(sensorData.get(i)) +"\n";
+							if(!str.equals(""))
+							{
+								str= "Data from "+ bundle.getSymbolicName()+":\n"+str;
+								LogEx(str);
+							}
+							
+						} catch (Exception e) {
+							// TODO Auto-generated catch block
+							LogEx(e.getMessage());
+						}
+
+						
+					}
+
+				}
+				
+			} 
+			catch (InvalidSyntaxException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+	
+	}
+}
+	
+	
+	/** Called when the user clicks the Display log button */
+	//@TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+	public void displayLog(View view) {
+		
+
+		label1.setText(logString);
+	}
+	
+	
+	//this subroutine gets the result of bundle activity (not used)
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		 super.onActivityResult(requestCode, resultCode, data);
+
+	    if (requestCode == 1) {
+	        if(resultCode == RESULT_OK){
+	            String result=data.getStringExtra("result");
+	            LogEx(result);
+	        }
+	        if (resultCode == RESULT_CANCELED) {
+	            LogEx("Bundle Result Canceled");
+	        }
+	    }
+	}
+}
